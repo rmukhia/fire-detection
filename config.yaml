@@ -1,0 +1,83 @@
+paths:
+  DATA_DIR: data
+  OUTPUT_DIR: output_7p_sma
+  ANNOTATED_DATA_DIR: annotated_data
+  PROCESSED_DATA_DIR: processed_data
+  INTERMEDIATE_DIR: intermediate
+  STATS_DIR: stats
+  STATS_IMAGES_DIR: images
+  STATS_CSV_DIR: csv
+  STATS_HTML_DIR: html
+  LOGS_DIR: logs
+  RAW_DATA_PATH: sensor_data.csv
+  LOCATION_DATA_PATH: dim_location.csv
+  PROCESSED_DATA_PATH: consolidated_sensor_data.parquet
+  LABEL_DATA_PATH: label.csv
+  DISTANCE_ANNOTATED_PATH: sensor_data_window_fire_distance.parquet
+  ANNOTATED_DATA_PATH: annotated_data.parquet
+  DATASET_PATH: dataset.pt
+  MODEL_DIR: models
+  SCALER_PATH: scaler.joblib
+  BEST_MODEL_PATH: best_model.pth
+
+data_pipeline:
+  NUM_SAMPLES: 20000
+  RESAMPLE_INTERVAL: 2min
+  WINDOW_DURATION_MINUTES: 120
+  SAMPLING_INTERVAL_SECONDS: 120
+  EPSG_ZONE: EPSG:32647
+  INPUT_COLUMNS:
+    - PM2.5
+    - Carbon dioxide (CO2)
+    - Relative humidity
+  LOCAL_OFFSET_MINUTES: 420
+  NUM_WORKERS: 2
+  RESAMPLE_TOLERANCE_FACTOR: 0.5
+  WINDOW_STEP_SIZE: 1
+  DURATION_FILTER_TOLERANCE: 5s
+  SMA_MULTIPLIERS: [2, 4, 8, 16]
+
+training:
+  EPOCHS: 50
+  BATCH_SIZE: 32
+  LEARNING_RATE: 0.001
+  RANDOM_SEED: 42
+  TRAIN_SPLIT: 0.7
+  VAL_SPLIT: 0.15
+  PATIENCE: 25
+  LOSS_FUNCTION: MSELoss
+  OPTIMIZER: Adam
+  USE_BETA_SCHEDULE: true
+  BETA_SCHEDULE_TYPE: linear
+  USE_DISTRIBUTED: false
+  DISTRIBUTED_BACKEND: nccl
+  USE_DATA_PARALLEL: false
+  USE_MIXED_PRECISION: false
+  DISTANCE_FILTER_THRESHOLD_M: 5000
+  ANOMALY_THRESHOLD_PERCENTILE: 99.95
+  LOG_FILENAME_PATTERN: "%Y-%m-%d_%H-%M-%S.log"
+  DEVICE: xpu
+
+tuning:
+  AUTOENCODER_CLASS: VariationalAutoencoder
+  LATENT_DIM: 12
+  HIDDEN_DIM: 360
+  CONV_NUM_LAYERS: 4
+  CONV_KERNEL_SIZE: 5
+  CONV_DROPOUT_RATE: 0.1
+  CONV_USE_ATTENTION: true
+  CONV_USE_RESIDUAL: true
+  KMEANS_N_CLUSTERS: 32
+  DBSCAN_EPS: 0.3
+  DBSCAN_MIN_SAMPLES: 5
+  DIM_REDUCTION_METHOD: tsne
+  HYPERPARAMETER_GRID:
+    latent_dims: [18, 36]
+    hidden_dims: [180, 360]
+    anomaly_threshold_percentiles: [99.9, 99.98]
+  ADVANCED_HYPERPARAMETER_GRID:
+    latent_dims: [18, 36, 54]
+    hidden_dims: [180, 360, 540]
+    learning_rates: [0.001, 0.0005, 0.0001]
+    batch_sizes: [16, 32, 64]
+    anomaly_thresholds: [99.9, 99.95, 99.98]
