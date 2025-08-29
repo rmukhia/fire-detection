@@ -11,11 +11,13 @@ class GroundTruthCollector:
     Class to collect ground truth data for forest fire detection.
     """
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, logger=None) -> None:
+        from aad.common.core_logging import ProcessLogger
         self.config = config
         self.firms_data_path = os.path.join(config.paths.DATA_DIR, "Hotspot_Jan-May-2023_100km.csv")
         self.report_data_path = os.path.join(config.paths.DATA_DIR, "GroundTruth_Combine_Output.csv")
         self.LOCAL_OFFSET_MINUTES = config.data_pipeline.LOCAL_OFFSET_MINUTES
+        self.logger = logger if logger is not None else ProcessLogger(config, "GroundTruthCollector")
 
     def _collect_firms(self, start_end_offset_min: int) -> pd.DataFrame:
         """
@@ -97,6 +99,7 @@ class GroundTruthCollector:
         groundtruth_data["fire_id"] = groundtruth_data.index
 
         # save the combined data to a CSV file
+        self.logger.ensure_file_dir(self.config.paths.LABEL_DATA_PATH)
         groundtruth_data.to_csv(self.config.paths.LABEL_DATA_PATH, index=False)
 
         return groundtruth_data

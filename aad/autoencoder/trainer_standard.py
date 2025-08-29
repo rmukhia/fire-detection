@@ -54,7 +54,6 @@ class StandardTrainer(BaseTrainer):
         optimizer_name: str,
         batch_size: int,
         latent_dim: int,
-        hidden_dim: int,
         window_size: int,
         num_features: int,
         device: str,
@@ -74,7 +73,6 @@ class StandardTrainer(BaseTrainer):
         self.optimizer_name = optimizer_name
         self.batch_size = batch_size
         self.latent_dim = latent_dim
-        self.hidden_dim = hidden_dim
         self.window_size = window_size
         self.num_features = num_features
         self.stats_images_dir = stats_images_dir
@@ -345,10 +343,15 @@ class StandardTrainer(BaseTrainer):
             for X, _, _, _ in dataloader:
                 X = X.to(self.device)
                 step_result: Tuple[Any, ...] = model.val_step(X, loss_fn)  # type: ignore
-                if len(step_result) == 4:
-                    loss_tensor, _, _, _ = step_result
-                else:
+                if len(step_result) == 5:
                     loss_tensor, _, _, _, _ = step_result
+                elif len(step_result) == 4:
+                    loss_tensor, _, _, _ = step_result
+                elif len(step_result) == 3:
+                    # Unpack for the case where only loss, reconstruction, and anomaly scores are returned.
+                    loss_tensor, _, _ = step_result
+                else:
+                    raise ValueError(f"Unexpected number of values returned by validation step: {len(step_result)}")
 
                 epoch_loss += loss_tensor
                 num_batches += 1
@@ -384,14 +387,13 @@ class StandardTrainer(BaseTrainer):
             },
         )
 
-        self._log_model_architecture(model)
+        #self._log_model_architecture(model)
         self.logger.log_step(
             "Model initialized",
             {
                 "time_steps": self.window_size,
                 "num_features": self.num_features,
                 "latent_dim": self.latent_dim,
-                "hidden_dim": self.hidden_dim,
             },
         )
 
@@ -414,10 +416,22 @@ class StandardTrainer(BaseTrainer):
         optimizer_class = getattr(torch.optim, self.optimizer_name)
         optimizer = optimizer_class(model.parameters(), lr=self.learning_rate)
 
-        # Add learning rate scheduler
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, patience=self.patience // 2, min_lr=1e-6
-        )
+        # Add learning rate scheduler (dynamic selection)
+        scheduler_type = getattr(self, "scheduler", "ReduceLROnPlateau")
+        if scheduler_type == "ReduceLROnPlateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="min", factor=0.5, patience=self.patience // 2, min_lr=1e-6
+            )
+        elif scheduler_type == "CosineAnnealingLR":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=self.epochs, eta_min=1e-6
+            )
+        elif scheduler_type == "StepLR":
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer, step_size=max(1, self.epochs // 5), gamma=0.5
+            )
+        else:
+            raise ValueError(f"Unsupported scheduler type: {scheduler_type}")
 
         self.logger.log_step(
             "Optimizer configured",
@@ -425,7 +439,7 @@ class StandardTrainer(BaseTrainer):
                 "optimizer": self.optimizer_name,
                 "learning_rate": self.learning_rate,
                 "loss_function": self.loss_function_name,
-                "scheduler": "ReduceLROnPlateau",
+                "scheduler": scheduler_type,
             },
         )
 
@@ -508,7 +522,10 @@ class StandardTrainer(BaseTrainer):
                 break
 
             # Update learning rate scheduler
-            scheduler.step(val_loss)
+            if scheduler_type == "ReduceLROnPlateau":
+                scheduler.step(val_loss)
+            elif scheduler_type == "CosineAnnealingLR" or scheduler_type == "StepLR":
+                scheduler.step(epoch)
 
             self.on_epoch_end(
                 epoch,
@@ -546,7 +563,6 @@ class StandardTrainer(BaseTrainer):
                 "learning_rate": self.learning_rate,
                 "batch_size": self.batch_size,
                 "latent_dim": self.latent_dim,
-                "hidden_dim": self.hidden_dim,
                 "time_steps": self.window_size,
                 "num_features": self.num_features,
             },

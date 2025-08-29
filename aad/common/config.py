@@ -19,10 +19,12 @@ class PathsConfig:
     Handles all path-related variables: data, logs, stats, output, etc.
     """
 
-    def __init__(self):
+    def __init__(self, data_dir=None, output_dir=None, model_dir=None, dataset_dir=None):
         cfg = _YAML_CONFIG.get("paths", {})
-        self.DATA_DIR = os.environ.get("DATA_DIR", cfg.get("DATA_DIR", "data"))
-        self.OUTPUT_DIR = os.environ.get("OUTPUT_DIR", cfg.get("OUTPUT_DIR", "output"))
+        self.DATA_DIR = data_dir if data_dir is not None else cfg.get("DATA_DIR", "data")
+        self.OUTPUT_DIR = output_dir if output_dir is not None else cfg.get("OUTPUT_DIR", "output")
+        self.MODEL_DIR = model_dir if model_dir is not None else cfg.get("MODEL_DIR", "models")
+        self.DATASET_DIR = dataset_dir if dataset_dir is not None else cfg.get("DATASET_DIR", "datasets")
         self.ANNOTATED_DATA_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("ANNOTATED_DATA_DIR", "annotated_data"))
         self.PROCESSED_DATA_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("PROCESSED_DATA_DIR", "processed_data"))
         self.INTERMEDIATE_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("INTERMEDIATE_DIR", "intermediate"))
@@ -31,7 +33,6 @@ class PathsConfig:
         self.STATS_CSV_DIR = os.path.join(self.STATS_DIR, cfg.get("STATS_CSV_DIR", "csv"))
         self.STATS_HTML_DIR = os.path.join(self.STATS_DIR, cfg.get("STATS_HTML_DIR", "html"))
         self.LOGS_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("LOGS_DIR", "logs"))
-        self.MODEL_DIR = os.environ.get("MODEL_DIR", cfg.get("MODEL_DIR", "models"))
 
         # Raw and processed data files
         self.RAW_DATA_PATH = os.path.join(self.DATA_DIR, cfg.get("RAW_DATA_PATH", "sensor_data.csv"))
@@ -40,7 +41,7 @@ class PathsConfig:
             self.PROCESSED_DATA_DIR,
             cfg.get("PROCESSED_DATA_PATH", "consolidated_sensor_data.parquet"),
         )
-        self.LABEL_DATA_PATH = os.path.join(self.PROCESSED_DATA_DIR, cfg.get("LABEL_DATA_PATH", "label.csv"))
+        self.LABEL_DATA_PATH = os.path.join(self.DATASET_DIR, cfg.get("LABEL_DATA_PATH", "label.csv"))
         self.DISTANCE_ANNOTATED_PATH = os.path.join(
             self.ANNOTATED_DATA_DIR,
             cfg.get("DISTANCE_ANNOTATED_PATH", "sensor_data_window_fire_distance.parquet"),
@@ -49,7 +50,7 @@ class PathsConfig:
             self.ANNOTATED_DATA_DIR,
             cfg.get("ANNOTATED_DATA_PATH", "annotated_data.parquet"),
         )
-        self.DATASET_PATH = os.path.join(self.PROCESSED_DATA_DIR, cfg.get("DATASET_PATH", "dataset.pt"))
+        self.DATASET_PATH = os.path.join(self.DATASET_DIR, cfg.get("DATASET_PATH", "dataset.pt"))
 
         # Model/scaler paths
         self.SCALER_PATH = os.path.join(self.MODEL_DIR, cfg.get("SCALER_PATH", "scaler.joblib"))
@@ -74,6 +75,7 @@ class PathsConfig:
         directories = [
             self.DATA_DIR,
             self.OUTPUT_DIR,
+            self.DATASET_DIR,
             self.ANNOTATED_DATA_DIR,
             self.PROCESSED_DATA_DIR,
             self.INTERMEDIATE_DIR,
@@ -105,7 +107,7 @@ class DataPipelineConfig:
         self.RESAMPLE_TOLERANCE_FACTOR = float(cfg.get("RESAMPLE_TOLERANCE_FACTOR", 0.5))
         self.WINDOW_STEP_SIZE = int(cfg.get("WINDOW_STEP_SIZE", 1))
         self.DURATION_FILTER_TOLERANCE = cfg.get("DURATION_FILTER_TOLERANCE", "5s")
-        self.SMA_MULTIPLIERS = cfg.get("SMA_MULTIPLIERS", [2, 4, 8, 16])
+        self.SMA_MULTIPLIERS = cfg.get("SMA_MULTIPLIERS", [3, 6, 9, 12])
 
     @property
     def WINDOW_SIZE(self) -> int:
@@ -132,6 +134,7 @@ class TrainingConfig:
         self.PATIENCE = int(os.environ.get("PATIENCE", cfg.get("PATIENCE", 25)))
         self.LOSS_FUNCTION = os.environ.get("LOSS_FUNCTION", cfg.get("LOSS_FUNCTION", "MSELoss"))
         self.OPTIMIZER = os.environ.get("OPTIMIZER", cfg.get("OPTIMIZER", "Adam"))
+        self.SCHEDULER = os.environ.get("SCHEDULER", cfg.get("SCHEDULER", "ReduceLROnPlateau"))
         self.USE_BETA_SCHEDULE = (
             os.environ.get("USE_BETA_SCHEDULE", str(cfg.get("USE_BETA_SCHEDULE", True))).lower() == "true"
         )
@@ -197,8 +200,13 @@ class MainConfig:
     Sets up cross-config paths and parameters.
     """
 
-    def __init__(self):
-        self.paths = PathsConfig()
+    def __init__(self, data_dir=None, output_dir=None, model_dir=None, dataset_dir=None):
+        self.paths = PathsConfig(
+            data_dir=data_dir,
+            output_dir=output_dir,
+            model_dir=model_dir,
+            dataset_dir=dataset_dir
+        )
         self.data_pipeline = DataPipelineConfig()
         self.training = TrainingConfig()
         self.tuning = TuningConfig()

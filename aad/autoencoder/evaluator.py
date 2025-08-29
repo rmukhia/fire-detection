@@ -34,7 +34,6 @@ class ModelEvaluator:
 
     def __init__(
         self,
-        anomaly_threshold_percentile: float,
         distance_filter_threshold_m: float,
         device: torch.device,
         logger: core_logging.ProcessLogger,
@@ -59,7 +58,6 @@ class ModelEvaluator:
             eval_stats_img_path: Path for evaluation statistics image.
             eval_results_csv_path: Path for evaluation results CSV.
             eval_summary_json_path: Path for evaluation summary JSON.
-            anomaly_threshold_percentile: Percentile for anomaly threshold.
             distance_filter_threshold_m: Distance threshold for fire label.
         """
         self.device = device
@@ -71,7 +69,6 @@ class ModelEvaluator:
         self.eval_stats_img_path = eval_stats_img_path
         self.eval_results_csv_path = eval_results_csv_path
         self.eval_summary_json_path = eval_summary_json_path
-        self.anomaly_threshold_percentile = anomaly_threshold_percentile
         self.distance_filter_threshold_m = distance_filter_threshold_m
         plt.style.use("seaborn-v0_8-paper")
         sns.set_palette("husl")
@@ -304,7 +301,8 @@ class ModelEvaluator:
         # 5. Threshold Analysis
         ax5 = axes[1, 1]
         # Test different threshold percentiles
-        percentiles = np.arange(70, 99.95, 0.5)
+        percentiles = np.append(np.arange(1, 99.98, 5), (self.anomaly_threshold_percentile, 99.98))
+        percentiles = np.unique(percentiles)  # avoid duplicate if 99.98 is already present
         f1_scores = []
         precisions = []
         recalls = []
@@ -434,45 +432,159 @@ class ModelEvaluator:
 
         self.logger.log_step(f"Evaluation statistics saved to: {self.eval_stats_img_path}")
 
-    def evaluate_model(self, save_stats: Optional[bool] = False) -> Dict[str, float]:
+    def _find_optimal_threshold_internal(
+        self,
+        anomaly_scores: np.ndarray,
+        true_labels: np.ndarray,
+        all_window_ids: np.ndarray,
+        metric: str = "f1",
+        fallback_percentile: float = 95.0
+    ) -> Dict[str, Any]:
+        """Internal helper method for finding optimal threshold."""
+        if len(np.unique(true_labels)) < 2:
+            self.logger.log_warning("Dataset contains only one class. Cannot compute metrics.")
+            return {
+                "f1": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "accuracy": 0.0,
+                "specificity": 0.0,
+                "threshold_percentile": None,
+                "threshold": None,
+                "true_positive_window_ids": [],
+            }
+
+        percentiles_to_test = np.arange(1, 99.99, 0.1)
+        best_val = -1
+        optimal_percentile = None
+        optimal_threshold_value = None
+        best_metrics = {}
+        found = False
+        
+        for p in percentiles_to_test:
+            current_threshold = float(np.percentile(anomaly_scores, p))
+            preds = anomaly_scores > current_threshold
+            f1, precision, recall, accuracy, specificity = self.calculate_metrics(true_labels, preds)
+            metric_map = {
+                "f1": f1,
+                "precision": precision,
+                "recall": recall,
+                "accuracy": accuracy,
+                "specificity": specificity,
+            }
+            val = metric_map.get(metric, f1)
+            if val > best_val:
+                best_val = val
+                optimal_percentile = p
+                optimal_threshold_value = current_threshold
+                best_metrics = {
+                    "f1": f1,
+                    "precision": precision,
+                    "recall": recall,
+                    "accuracy": accuracy,
+                    "specificity": specificity,
+                    "threshold": current_threshold,
+                    "threshold_percentile": p,
+                    "true_positive_window_ids": all_window_ids[(true_labels == 1) & (preds == 1)].tolist(),
+                }
+                found = True
+
+        if found:
+            self.logger.log_step(
+                "Optimal threshold found",
+                {
+                    "optimal_percentile": optimal_percentile,
+                    "optimal_threshold_value": optimal_threshold_value,
+                    "best_metric": metric,
+                    "best_metric_value": best_val,
+                },
+            )
+            return best_metrics
+        else:
+            # fallback to fixed threshold
+            threshold_float = float(np.percentile(anomaly_scores, fallback_percentile))
+            preds = anomaly_scores > threshold_float
+            f1, precision, recall, accuracy, specificity = self.calculate_metrics(true_labels, preds)
+            self.logger.log_step(
+                "Optimal threshold not found, fallback to fixed",
+                {
+                    "threshold_percentile": fallback_percentile,
+                    "threshold_value": threshold_float,
+                },
+            )
+            return {
+                "f1": f1,
+                "precision": precision,
+                "recall": recall,
+                "accuracy": accuracy,
+                "specificity": specificity,
+                "threshold": threshold_float,
+                "threshold_percentile": fallback_percentile,
+                "true_positive_window_ids": all_window_ids[(true_labels == 1) & (preds == 1)].tolist(),
+            }
+
+    def evaluate_model(
+        self,
+        anomaly_scores: np.ndarray,
+        all_window_ids: np.ndarray,
+        all_fire_ids: np.ndarray,
+        all_distances: np.ndarray,
+        anomaly_threshold_percentile: float = 95.0,
+        save_stats: Optional[bool] = False,
+        threshold_mode: str = "fixed",
+        metric: str = "f1"
+    ) -> Dict[str, float]:
         """
-        Execute complete model evaluation workflow using anomaly scores.
+        Execute model evaluation workflow using anomaly scores.
+
+        Args:
+            anomaly_scores: np.ndarray of anomaly scores.
+            all_window_ids: np.ndarray of window IDs.
+            all_fire_ids: np.ndarray of fire IDs.
+            all_distances: np.ndarray of distances.
+            anomaly_threshold_percentile: Percentile for fixed threshold.
+            save_stats: Whether to save statistics.
+            threshold_mode: "fixed" or "optimal".
+            metric: Metric to optimize for "optimal" mode ("f1", "precision", "recall", "accuracy", "specificity").
 
         Returns:
             Dict[str, float]: Evaluation metrics including f1_score, precision, recall, accuracy, specificity, and threshold.
         """
         self.logger.log_step("Starting model evaluation")
+        true_labels = self.create_true_labels(all_fire_ids, all_distances)
 
-        anomaly_scores: np.ndarray
-        all_window_ids: np.ndarray
-        all_fire_ids: np.ndarray
-        all_distances: np.ndarray
-
-        anomaly_scores, all_window_ids, all_fire_ids, all_distances = self.compute_anomaly_scores(
-            self.model, self.test_loader
-        )
-
-        threshold_float: float = float(np.percentile(anomaly_scores, self.anomaly_threshold_percentile))
+        threshold_float: float = float(np.percentile(anomaly_scores, anomaly_threshold_percentile))
         predicted_anomalies: np.ndarray = anomaly_scores > threshold_float
 
-        self.logger.log_step(
-            "Anomaly threshold computed",
-            {
-                "threshold_percentile": self.anomaly_threshold_percentile,
-                "threshold_value": threshold_float,
-                "predicted_anomalies": int(np.sum(predicted_anomalies)),
-            },
-        )
-
-        true_labels: np.ndarray = self.create_true_labels(all_fire_ids, all_distances)
-
-        f1: float
-        precision: float
-        recall: float
-        accuracy: float
-        specificity: float
+        if threshold_mode == "fixed":
+            self.anomaly_threshold_percentile = anomaly_threshold_percentile
+            threshold_float = float(np.percentile(anomaly_scores, anomaly_threshold_percentile))
+            predicted_anomalies = anomaly_scores > threshold_float
+            self.logger.log_step(
+                "Anomaly threshold computed (fixed)",
+                {
+                    "threshold_percentile": anomaly_threshold_percentile,
+                    "threshold_value": threshold_float,
+                    "predicted_anomalies": int(np.sum(predicted_anomalies)),
+                },
+            )
+        elif threshold_mode == "optimal":
+            result = self._find_optimal_threshold_internal(
+                anomaly_scores,
+                true_labels,
+                all_window_ids,
+                metric,
+                anomaly_threshold_percentile
+            )
+            self.anomaly_threshold_percentile = result["threshold_percentile"]
+            threshold_float = result["threshold"]
+            predicted_anomalies = anomaly_scores > threshold_float
+        else:
+            raise ValueError(f"Unknown threshold_mode: {threshold_mode}")
 
         f1, precision, recall, accuracy, specificity = self.calculate_metrics(true_labels, predicted_anomalies)
+        true_positives_mask = (true_labels == 1) & (predicted_anomalies == 1)
+        true_positive_window_ids = all_window_ids[true_positives_mask]
 
         if save_stats:
             self._log_evaluation_statistics(
@@ -485,7 +597,6 @@ class ModelEvaluator:
                 f1,
                 accuracy,
             )
-
             self.save_evaluation_results(
                 anomaly_scores,
                 true_labels,
@@ -509,11 +620,10 @@ class ModelEvaluator:
             "accuracy": accuracy,
             "specificity": specificity,
             "threshold": threshold_float,
+            "true_positive_window_ids": true_positive_window_ids.tolist(),
         }
 
-    def compute_anomaly_scores(
-        self, model: nn.Module, dataloader: DataLoader
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def compute_anomaly_scores(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculate anomaly scores for test data using model.compute_anomaly_score.
 
@@ -524,6 +634,8 @@ class ModelEvaluator:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: (scores, window_ids, fire_ids, distances) arrays.
         """
+        model = self.model
+        dataloader = self.test_loader
         anomaly_scores: List[float] = []
         all_window_ids: List[int] = []
         all_fire_ids: List[int] = []
@@ -537,18 +649,25 @@ class ModelEvaluator:
 
                 x = x.to(self.device)
                 # Removed excessive compute_anomaly_score call log
-                assert callable(getattr(model, "compute_anomaly_score", None)), (
-                    f"Model {type(model).__name__} does not have a callable compute_anomaly_score method. "
-                    f"Found: {getattr(model, 'compute_anomaly_score', None)}"
-                )
+                if not hasattr(model, "compute_anomaly_score"):
+                    raise AttributeError(
+                        f"Model {type(model).__name__} missing required compute_anomaly_score method"
+                    )
+                
+                compute_fn = model.compute_anomaly_score
+                if not callable(compute_fn):
+                    raise TypeError(
+                        f"Model {type(model).__name__} compute_anomaly_score is not callable. "
+                        f"Got type: {type(compute_fn)}"
+                    )
+                
                 try:
-                    scores = model.compute_anomaly_score(x)
+                    scores = compute_fn(x)
                 except Exception as e:
                     self.logger.log_error(
-                        f"Failed to call compute_anomaly_score on {type(model).__name__}: {e}. "
-                        f"Attribute type: {type(getattr(model, 'compute_anomaly_score', None))}"
+                        f"Failed to compute anomaly scores on {type(model).__name__}: {str(e)}"
                     )
-                    raise
+                    raise ValueError(f"Anomaly score computation failed: {str(e)}") from e
                 # Removed excessive compute_anomaly_score output log
                 anomaly_scores.extend(scores.cpu().numpy())
                 all_window_ids.extend(window_id.cpu().numpy())
@@ -642,20 +761,20 @@ class ModelEvaluator:
             true_negatives / (true_negatives + false_positives) if (true_negatives + false_positives) > 0 else 0
         )
 
-        self.logger.log_step(
-            "Evaluation metrics calculated",
-            {
-                "true_positives": int(true_positives),
-                "false_positives": int(false_positives),
-                "false_negatives": int(false_negatives),
-                "true_negatives": int(true_negatives),
-                "precision": float(precision),
-                "recall": float(recall),
-                "f1_score": float(f1),
-                "accuracy": float(accuracy),
-                "specificity": float(specificity),
-            },
-        )
+        # self.logger.log_step(
+        #     "Evaluation metrics calculated",
+        #     {
+        #         "true_positives": int(true_positives),
+        #         "false_positives": int(false_positives),
+        #         "false_negatives": int(false_negatives),
+        #         "true_negatives": int(true_negatives),
+        #         "precision": float(precision),
+        #         "recall": float(recall),
+        #         "f1_score": float(f1),
+        #         "accuracy": float(accuracy),
+        #         "specificity": float(specificity),
+        #     },
+        # )
 
         # Removed excessive metrics summary log (TP, FP, FN, TN)
         # Removed excessive metrics summary logs (Precision, Recall, F1-Score, Accuracy, Specificity)
@@ -760,4 +879,34 @@ class ModelEvaluator:
 
         self.logger.log_step(
             f"Evaluation results saved to {self.eval_results_csv_path} and {self.eval_summary_json_path}"
+        )
+
+    def find_optimal_threshold(
+        self,
+        anomaly_scores: np.ndarray,
+        true_labels: np.ndarray,
+        all_window_ids: np.ndarray,
+        metric: str = "f1",
+        fallback_percentile: float = 95.0
+    ) -> Dict[str, Any]:
+        """
+        Finds the optimal anomaly threshold percentile that maximizes the selected metric.
+
+        Args:
+            anomaly_scores: np.ndarray of anomaly scores.
+            true_labels: np.ndarray of true labels.
+            all_window_ids: np.ndarray of window IDs.
+            metric: Metric to optimize ("f1", "precision", "recall", "accuracy", "specificity").
+            fallback_percentile: Percentile to use if no optimal threshold is found.
+
+        Returns:
+            Dictionary containing metrics and optimal threshold info.
+        """
+        self.logger.log_info("Starting search for optimal anomaly threshold.")
+        return self._find_optimal_threshold_internal(
+            anomaly_scores,
+            true_labels,
+            all_window_ids,
+            metric,
+            fallback_percentile
         )

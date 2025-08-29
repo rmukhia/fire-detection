@@ -28,6 +28,29 @@ from .utils import create_window_views
 from aad.common import viz_style
 
 
+def rolling_slope(y):
+    if len(y) < 2:
+        return np.nan
+    if np.all(np.isnan(y)):
+        return np.nan
+    
+    x = np.arange(len(y))
+    
+    idx = np.isfinite(x) & np.isfinite(y)
+    if (len(x[idx]) < 2):
+        return np.nan
+
+    try:
+        fit = np.polyfit(x[idx], y[idx], 1)
+        if np.any(np.isnan(x)):
+            print('hasnan')
+        if np.isnan(fit[0]):
+            print('nan')
+        return fit[0]  # slope
+    except np.linalg.LinAlgError as e:
+        print(f"[rolling_slope] LinAlgError: {e} | y={y}")
+        raise
+
 class DataPreprocessor(DaskPipelineBase):
     """
     Advanced data preprocessor with partitioned processing and comprehensive monitoring.
@@ -42,6 +65,7 @@ class DataPreprocessor(DaskPipelineBase):
     def __init__(
         self,
         config: Any,
+        multiplier: int,
         df_sensor: Optional[pd.DataFrame] = None,
         logger: Optional[core_logging.ProcessLogger] = None,
     ) -> None:
@@ -52,7 +76,7 @@ class DataPreprocessor(DaskPipelineBase):
         self.intermediate_data: Dict[str, Any] = {}
         self.processing_metrics: Dict[str, Any] = {}
         self.logger.log_step(f"Created temporary directory: {self.temp_dir}")
-
+        self.multiplier = multiplier
         # Visualization Setup
         plt.style.use("seaborn-v0_8-paper")
         sns.set_palette("husl")
@@ -124,26 +148,24 @@ class DataPreprocessor(DaskPipelineBase):
         resampled_sensor = sensor_df.reindex(regular_index, method="nearest", tolerance=tolerance)
 
          # --- Feature Engineering: SMA, Min, Max ---
-        self.logger.log_step(f"Sensor {sensor_id}: Adding SMA, Min, Max features.")
+        #self.logger.log_step(f"Sensor {sensor_id}: Adding SMA, Min, Max features.")
 
         # Use the same numeric columns identified at the start of the method
         feature_cols_to_process = numeric_cols[:]
 
+        # add here the engineered features
         for col in feature_cols_to_process:
-            for m in self.config.data_pipeline.SMA_MULTIPLIERS:
-                window = self.config.data_pipeline.WINDOW_SIZE * m
-                
-                # Simple Moving Average
-                sma_col = f"{col}_sma_{m}x"
-                resampled_sensor[sma_col] = resampled_sensor[col].rolling(window=window, min_periods=1).mean()
-                
-                # Max value in window
-                max_col = f"{col}_max_{m}x"
-                resampled_sensor[max_col] = resampled_sensor[col].rolling(window=window, min_periods=1).max()
-                
-                # Min value in window
-                min_col = f"{col}_min_{m}x"
-                resampled_sensor[min_col] = resampled_sensor[col].rolling(window=window, min_periods=1).min()
+            window = self.config.data_pipeline.WINDOW_SIZE * self.multiplier
+
+            # Rolling Mean (trend)
+            sma_col = f"{col}_mean_{self.multiplier}x"
+            resampled_sensor[sma_col] = (
+                resampled_sensor[col].rolling(window=window, min_periods=1).mean()
+            )
+
+            # Rolling window regression slope
+            slope_col = f"{col}_reg_slope_{self.multiplier}x"
+            resampled_sensor[slope_col] = resampled_sensor[col].rolling(window=window, min_periods=1).apply(rolling_slope, raw=True)    
 
         resampled_sensor = resampled_sensor.dropna()
     

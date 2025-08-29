@@ -201,7 +201,7 @@ class DataSequencer(DaskPipelineBase):
 
         return sequences, fire_ids, distances, window_ids
 
-    def create_dataset(self, fit_scaler: bool = True) -> TensorDataset:
+    def create_dataset(self,multiplier:int, fit_scaler: bool = True) -> TensorDataset:
         """
         Execute complete dataset creation workflow on all data at once (no Dask multi-tasking).
 
@@ -220,13 +220,12 @@ class DataSequencer(DaskPipelineBase):
             raise ValueError("No annotated sensor data found.")
 
         columns = []
+        # add here
         for col in self.config.data_pipeline.INPUT_COLUMNS:
             columns.append(col)
-            for m in self.config.data_pipeline.SMA_MULTIPLIERS:
-                columns.append(f"{col}_sma_{m}x")
-                columns.append(f"{col}_max_{m}x")
-                columns.append(f"{col}_min_{m}x")
-
+            columns.append(f"{col}_mean_{multiplier}x")
+            columns.append(f"{col}_reg_slope_{multiplier}x")
+            
         self.logger.log_step(f"Columns for tensors: {columns}")
         print(f"Columns for tensors: {columns}, {len(columns)} total")
 

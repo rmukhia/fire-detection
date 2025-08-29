@@ -77,6 +77,10 @@ def setup_logging(config: Any) -> logging.Logger:
 class ProcessLogger:
     """Enhanced process logger for tracking workflow steps."""
 
+    def ensure_file_dir(self, file_path: str) -> None:
+        """Ensure the parent directory for a file exists."""
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     def __init__(self, config: Any, process_name: str) -> None:
         self.config: Any = config
         self.process_name: str = process_name

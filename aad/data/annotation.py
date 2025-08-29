@@ -294,6 +294,7 @@ class DataAnnotator(DaskPipelineBase):
             df_result["distance_to_fire_m"] = float("inf")
             df_result["fire_id"] = df_result["fire_id"].astype(int)
             sensor_file: str = os.path.join(self.config.paths.ANNOTATED_DATA_DIR, f"sensor_{sensor_id}.parquet")
+            self.logger.ensure_file_dir(sensor_file)
             df_result.to_parquet(sensor_file, index=False, compression="snappy")
 
             # Update metrics
@@ -371,6 +372,7 @@ class DataAnnotator(DaskPipelineBase):
 
         # Save per-sensor results
         sensor_file: str = os.path.join(self.config.paths.ANNOTATED_DATA_DIR, f"sensor_{sensor_id}.parquet")
+        self.logger.ensure_file_dir(sensor_file)
         df_result.to_parquet(sensor_file, index=False, compression="snappy")
 
         del df_window, window_summary, window_geo, df_labels_filtered, annotations
