@@ -224,6 +224,10 @@ class DataSequencer(DaskPipelineBase):
             columns.append(col)
             for m in self.config.data_pipeline.SMA_MULTIPLIERS:
                 columns.append(f"{col}_sma_{m}x")
+                columns.append(f"{col}_median_{m}x")
+                columns.append(f"{col}_std_{m}x")
+                columns.append(f"{col}_slope_{m}x")
+                columns.append(f"{col}_zscore_{m}x")
                 columns.append(f"{col}_max_{m}x")
                 columns.append(f"{col}_min_{m}x")
 

@@ -23,6 +23,7 @@ class PathsConfig:
         cfg = _YAML_CONFIG.get("paths", {})
         self.DATA_DIR = os.environ.get("DATA_DIR", cfg.get("DATA_DIR", "data"))
         self.OUTPUT_DIR = os.environ.get("OUTPUT_DIR", cfg.get("OUTPUT_DIR", "output"))
+        self.DATASET_DIR = os.path.join(self.DATASET_DIR, cfg.get("DATASET_DIR", "datasets"))
         self.ANNOTATED_DATA_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("ANNOTATED_DATA_DIR", "annotated_data"))
         self.PROCESSED_DATA_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("PROCESSED_DATA_DIR", "processed_data"))
         self.INTERMEDIATE_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("INTERMEDIATE_DIR", "intermediate"))
@@ -40,7 +41,7 @@ class PathsConfig:
             self.PROCESSED_DATA_DIR,
             cfg.get("PROCESSED_DATA_PATH", "consolidated_sensor_data.parquet"),
         )
-        self.LABEL_DATA_PATH = os.path.join(self.PROCESSED_DATA_DIR, cfg.get("LABEL_DATA_PATH", "label.csv"))
+        self.LABEL_DATA_PATH = os.path.join(self.DATASET_DIR, cfg.get("LABEL_DATA_PATH", "label.csv"))
         self.DISTANCE_ANNOTATED_PATH = os.path.join(
             self.ANNOTATED_DATA_DIR,
             cfg.get("DISTANCE_ANNOTATED_PATH", "sensor_data_window_fire_distance.parquet"),
@@ -49,7 +50,7 @@ class PathsConfig:
             self.ANNOTATED_DATA_DIR,
             cfg.get("ANNOTATED_DATA_PATH", "annotated_data.parquet"),
         )
-        self.DATASET_PATH = os.path.join(self.PROCESSED_DATA_DIR, cfg.get("DATASET_PATH", "dataset.pt"))
+        self.DATASET_PATH = os.path.join(self.DATASET_DIR, cfg.get("DATASET_PATH", "dataset.pt"))
 
         # Model/scaler paths
         self.SCALER_PATH = os.path.join(self.MODEL_DIR, cfg.get("SCALER_PATH", "scaler.joblib"))
