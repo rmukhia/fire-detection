@@ -23,7 +23,7 @@ class PathsConfig:
         cfg = _YAML_CONFIG.get("paths", {})
         self.DATA_DIR = os.environ.get("DATA_DIR", cfg.get("DATA_DIR", "data"))
         self.OUTPUT_DIR = os.environ.get("OUTPUT_DIR", cfg.get("OUTPUT_DIR", "output"))
-        self.DATASET_DIR = os.path.join(self.DATASET_DIR, cfg.get("DATASET_DIR", "datasets"))
+        self.DATASET_DIR = os.environ.get("DATASET_DIR", cfg.get("DATASET_DIR", "datasets"))
         self.ANNOTATED_DATA_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("ANNOTATED_DATA_DIR", "annotated_data"))
         self.PROCESSED_DATA_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("PROCESSED_DATA_DIR", "processed_data"))
         self.INTERMEDIATE_DIR = os.path.join(self.OUTPUT_DIR, cfg.get("INTERMEDIATE_DIR", "intermediate"))
@@ -75,6 +75,7 @@ class PathsConfig:
         directories = [
             self.DATA_DIR,
             self.OUTPUT_DIR,
+            self.DATASET_DIR,
             self.ANNOTATED_DATA_DIR,
             self.PROCESSED_DATA_DIR,
             self.INTERMEDIATE_DIR,
