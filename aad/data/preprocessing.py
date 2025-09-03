@@ -42,6 +42,7 @@ class DataPreprocessor(DaskPipelineBase):
     def __init__(
         self,
         config: Any,
+        multiplier: int,
         df_sensor: Optional[pd.DataFrame] = None,
         logger: Optional[core_logging.ProcessLogger] = None,
     ) -> None:
@@ -52,7 +53,7 @@ class DataPreprocessor(DaskPipelineBase):
         self.intermediate_data: Dict[str, Any] = {}
         self.processing_metrics: Dict[str, Any] = {}
         self.logger.log_step(f"Created temporary directory: {self.temp_dir}")
-
+        self.multiplier = multiplier
         # Visualization Setup
         plt.style.use("seaborn-v0_8-paper")
         sns.set_palette("husl")
@@ -130,50 +131,13 @@ class DataPreprocessor(DaskPipelineBase):
         feature_cols_to_process = numeric_cols[:]
 
         for col in feature_cols_to_process:
-            for m in self.config.data_pipeline.SMA_MULTIPLIERS:
-                window = self.config.data_pipeline.WINDOW_SIZE * m
+            window = self.config.data_pipeline.WINDOW_SIZE * self.multiplier
 
-                # Rolling Mean (trend)
-                sma_col = f"{col}_sma_{m}x"
-                resampled_sensor[sma_col] = (
-                    resampled_sensor[col].rolling(window=window, min_periods=1).mean()
-                )
-
-                # Rolling Median
-                median_col = f"{col}_median_{m}x"
-                resampled_sensor[median_col] = (
-                    resampled_sensor[col].rolling(window=window, min_periods=1).median()
-                )
-
-                # Rolling Standard Deviation (volatility)
-                std_col = f"{col}_std_{m}x"
-                resampled_sensor[std_col] = (
-                    resampled_sensor[col].rolling(window=window, min_periods=1).std()
-                )
-
-                # Rolling Slope (approximate trend derivative)
-                slope_col = f"{col}_slope_{m}x"
-                resampled_sensor[slope_col] = (
-                    resampled_sensor[sma_col].diff() / window
-                )
-
-                # Rolling Z-score (normalized anomaly)
-                z_col = f"{col}_zscore_{m}x"
-                resampled_sensor[z_col] = (
-                    (resampled_sensor[col] - resampled_sensor[sma_col]) / (resampled_sensor[std_col] + 1e-9)
-                )
-
-                # Rolling Max (captures peaks)
-                max_col = f"{col}_max_{m}x"
-                resampled_sensor[max_col] = (
-                    resampled_sensor[col].rolling(window=window, min_periods=1).max()
-                )
-
-                # Rolling Min (captures troughs)
-                min_col = f"{col}_min_{m}x"
-                resampled_sensor[min_col] = (
-                    resampled_sensor[col].rolling(window=window, min_periods=1).min()
-                )
+            # Rolling Mean (trend)
+            sma_col = f"{col}_mean_{self.multiplier}x"
+            resampled_sensor[sma_col] = (
+                resampled_sensor[col].rolling(window=window, min_periods=1).mean()
+            )
 
 
         resampled_sensor = resampled_sensor.dropna()

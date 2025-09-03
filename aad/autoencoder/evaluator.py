@@ -34,7 +34,6 @@ class ModelEvaluator:
 
     def __init__(
         self,
-        anomaly_threshold_percentile: float,
         distance_filter_threshold_m: float,
         device: torch.device,
         logger: core_logging.ProcessLogger,
@@ -59,7 +58,6 @@ class ModelEvaluator:
             eval_stats_img_path: Path for evaluation statistics image.
             eval_results_csv_path: Path for evaluation results CSV.
             eval_summary_json_path: Path for evaluation summary JSON.
-            anomaly_threshold_percentile: Percentile for anomaly threshold.
             distance_filter_threshold_m: Distance threshold for fire label.
         """
         self.device = device
@@ -71,7 +69,6 @@ class ModelEvaluator:
         self.eval_stats_img_path = eval_stats_img_path
         self.eval_results_csv_path = eval_results_csv_path
         self.eval_summary_json_path = eval_summary_json_path
-        self.anomaly_threshold_percentile = anomaly_threshold_percentile
         self.distance_filter_threshold_m = distance_filter_threshold_m
         plt.style.use("seaborn-v0_8-paper")
         sns.set_palette("husl")
@@ -304,7 +301,8 @@ class ModelEvaluator:
         # 5. Threshold Analysis
         ax5 = axes[1, 1]
         # Test different threshold percentiles
-        percentiles = np.arange(70, 99.95, 0.5)
+        percentiles = np.append(np.arange(70, 99.95, 0.5), 99.98)
+        percentiles = np.unique(percentiles)  # avoid duplicate if 99.98 is already present
         f1_scores = []
         precisions = []
         recalls = []
@@ -434,7 +432,7 @@ class ModelEvaluator:
 
         self.logger.log_step(f"Evaluation statistics saved to: {self.eval_stats_img_path}")
 
-    def evaluate_model(self, save_stats: Optional[bool] = False) -> Dict[str, float]:
+    def evaluate_model(self, anomaly_scores :np.ndarray, all_window_ids:np.ndarray, all_fire_ids:np.ndarray, all_distances:np.ndarray, anomaly_threshold_percentile, save_stats: Optional[bool] = False) -> Dict[str, float]:
         """
         Execute complete model evaluation workflow using anomaly scores.
 
@@ -442,23 +440,15 @@ class ModelEvaluator:
             Dict[str, float]: Evaluation metrics including f1_score, precision, recall, accuracy, specificity, and threshold.
         """
         self.logger.log_step("Starting model evaluation")
+        self.anomaly_threshold_percentile = anomaly_threshold_percentile
 
-        anomaly_scores: np.ndarray
-        all_window_ids: np.ndarray
-        all_fire_ids: np.ndarray
-        all_distances: np.ndarray
-
-        anomaly_scores, all_window_ids, all_fire_ids, all_distances = self.compute_anomaly_scores(
-            self.model, self.test_loader
-        )
-
-        threshold_float: float = float(np.percentile(anomaly_scores, self.anomaly_threshold_percentile))
+        threshold_float: float = float(np.percentile(anomaly_scores, anomaly_threshold_percentile))
         predicted_anomalies: np.ndarray = anomaly_scores > threshold_float
 
         self.logger.log_step(
             "Anomaly threshold computed",
             {
-                "threshold_percentile": self.anomaly_threshold_percentile,
+                "threshold_percentile": anomaly_threshold_percentile,
                 "threshold_value": threshold_float,
                 "predicted_anomalies": int(np.sum(predicted_anomalies)),
             },
@@ -473,6 +463,11 @@ class ModelEvaluator:
         specificity: float
 
         f1, precision, recall, accuracy, specificity = self.calculate_metrics(true_labels, predicted_anomalies)
+
+         # --- Get true positive window ids ---
+        true_positives_mask = (true_labels == 1) & (predicted_anomalies == 1)
+        true_positive_window_ids = all_window_ids[true_positives_mask]
+
 
         if save_stats:
             self._log_evaluation_statistics(
@@ -509,11 +504,10 @@ class ModelEvaluator:
             "accuracy": accuracy,
             "specificity": specificity,
             "threshold": threshold_float,
+            "true_positive_window_ids": true_positive_window_ids.tolist(),  # as a Python list
         }
 
-    def compute_anomaly_scores(
-        self, model: nn.Module, dataloader: DataLoader
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def compute_anomaly_scores(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculate anomaly scores for test data using model.compute_anomaly_score.
 
@@ -524,6 +518,8 @@ class ModelEvaluator:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: (scores, window_ids, fire_ids, distances) arrays.
         """
+        model = self.model
+        dataloader = self.test_loader
         anomaly_scores: List[float] = []
         all_window_ids: List[int] = []
         all_fire_ids: List[int] = []

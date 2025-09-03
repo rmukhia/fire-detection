@@ -107,7 +107,7 @@ class DataPipelineConfig:
         self.RESAMPLE_TOLERANCE_FACTOR = float(cfg.get("RESAMPLE_TOLERANCE_FACTOR", 0.5))
         self.WINDOW_STEP_SIZE = int(cfg.get("WINDOW_STEP_SIZE", 1))
         self.DURATION_FILTER_TOLERANCE = cfg.get("DURATION_FILTER_TOLERANCE", "5s")
-        self.SMA_MULTIPLIERS = cfg.get("SMA_MULTIPLIERS", [2, 4, 8, 16])
+        self.SMA_MULTIPLIERS = cfg.get("SMA_MULTIPLIERS", [3, 6, 9, 12])
 
     @property
     def WINDOW_SIZE(self) -> int:

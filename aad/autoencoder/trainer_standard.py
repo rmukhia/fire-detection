@@ -345,10 +345,15 @@ class StandardTrainer(BaseTrainer):
             for X, _, _, _ in dataloader:
                 X = X.to(self.device)
                 step_result: Tuple[Any, ...] = model.val_step(X, loss_fn)  # type: ignore
-                if len(step_result) == 4:
-                    loss_tensor, _, _, _ = step_result
-                else:
+                if len(step_result) == 5:
                     loss_tensor, _, _, _, _ = step_result
+                elif len(step_result) == 4:
+                    loss_tensor, _, _, _ = step_result
+                elif len(step_result) == 3:
+                    # Unpack for the case where only loss, reconstruction, and anomaly scores are returned.
+                    loss_tensor, _, _ = step_result
+                else:
+                    raise ValueError(f"Unexpected number of values returned by validation step: {len(step_result)}")
 
                 epoch_loss += loss_tensor
                 num_batches += 1
