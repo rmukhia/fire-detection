@@ -1,6 +1,8 @@
 import os
 from typing import Dict, List, Any
 import yaml
+import torch
+import psutil
 from .core_logging import ensure_directories
 
 
@@ -9,6 +11,21 @@ def load_yaml_config(path="config.yaml"):
         with open(path, "r") as f:
             return yaml.safe_load(f)
     return {}
+
+
+def get_optimal_device_config() -> str:
+    """Auto-detect optimal device for training."""
+    if torch.cuda.is_available():
+        return "cuda"
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+
+
+def get_optimal_workers() -> int:
+    """Get optimal number of workers based on system resources."""
+    return max(1, min(psutil.cpu_count(logical=False), psutil.virtual_memory().total // (2 * 1024**3)))
 
 
 _YAML_CONFIG = load_yaml_config()
@@ -103,7 +120,7 @@ class DataPipelineConfig:
         self.EPSG_ZONE = cfg.get("EPSG_ZONE", "EPSG:32647")
         self.INPUT_COLUMNS = cfg.get("INPUT_COLUMNS", ["PM2.5", "Carbon dioxide (CO2)", "Relative humidity"])
         self.LOCAL_OFFSET_MINUTES = int(cfg.get("LOCAL_OFFSET_MINUTES", 420))
-        self.NUM_WORKERS = int(cfg.get("NUM_WORKERS", 3))
+        self.NUM_WORKERS = int(cfg.get("NUM_WORKERS", get_optimal_workers()))
         self.RESAMPLE_TOLERANCE_FACTOR = float(cfg.get("RESAMPLE_TOLERANCE_FACTOR", 0.5))
         self.WINDOW_STEP_SIZE = int(cfg.get("WINDOW_STEP_SIZE", 1))
         self.DURATION_FILTER_TOLERANCE = cfg.get("DURATION_FILTER_TOLERANCE", "5s")
@@ -151,7 +168,11 @@ class TrainingConfig:
         self.DISTANCE_FILTER_THRESHOLD_M = int(cfg.get("DISTANCE_FILTER_THRESHOLD_M", 5000))
         self.ANOMALY_THRESHOLD_PERCENTILE = float(cfg.get("ANOMALY_THRESHOLD_PERCENTILE", 99.95))
         self.LOG_FILENAME_PATTERN = cfg.get("LOG_FILENAME_PATTERN", "%Y-%m-%d_%H-%M-%S.log")
-        self.DEVICE = cfg.get("DEVICE", "xpu")
+        device_config = cfg.get("DEVICE", "auto")
+        if device_config == "auto":
+            self.DEVICE = get_optimal_device_config()
+        else:
+            self.DEVICE = device_config
 
 
 class TuningConfig:

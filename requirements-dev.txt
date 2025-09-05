@@ -1,0 +1,11 @@
+# Development Dependencies for Fire Detection System
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=22.0.0
+flake8>=5.0.0
+mypy>=1.0.0
+pre-commit>=3.0.0
+jupyterlab>=4.0.0
+ipykernel>=6.0.0
+sphinx>=5.0.0
+sphinx-rtd-theme>=1.0.0

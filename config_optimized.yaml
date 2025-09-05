@@ -1,27 +1,14 @@
+# Fire Detection System Configuration
+# Generated with optimized settings for this system
+
 paths:
   DATA_DIR: data
   OUTPUT_DIR: output
-  ANNOTATED_DATA_DIR: annotated_data
-  PROCESSED_DATA_DIR: processed_data
-  INTERMEDIATE_DIR: intermediate
-  STATS_DIR: stats
-  STATS_IMAGES_DIR: images
-  STATS_CSV_DIR: csv
-  STATS_HTML_DIR: html
-  LOGS_DIR: logs
-  RAW_DATA_PATH: sensor_data.csv
-  LOCATION_DATA_PATH: dim_location.csv
-  PROCESSED_DATA_PATH: consolidated_sensor_data.parquet
-  LABEL_DATA_PATH: label.csv
-  DISTANCE_ANNOTATED_PATH: sensor_data_window_fire_distance.parquet
-  ANNOTATED_DATA_PATH: annotated_data.parquet
-  DATASET_PATH: dataset.pt
   MODEL_DIR: models
-  SCALER_PATH: scaler.joblib
-  BEST_MODEL_PATH: best_model.pth
+  LOGS_DIR: logs
 
 data_pipeline:
-  NUM_SAMPLES: 20000
+  NUM_SAMPLES: 100000
   RESAMPLE_INTERVAL: 2min
   WINDOW_DURATION_MINUTES: 120
   SAMPLING_INTERVAL_SECONDS: 120
@@ -39,7 +26,7 @@ data_pipeline:
 
 training:
   EPOCHS: 50
-  BATCH_SIZE: 32
+  BATCH_SIZE: 8
   LEARNING_RATE: 0.001
   RANDOM_SEED: 42
   TRAIN_SPLIT: 0.7
@@ -56,7 +43,7 @@ training:
   DISTANCE_FILTER_THRESHOLD_M: 5000
   ANOMALY_THRESHOLD_PERCENTILE: 99.95
   LOG_FILENAME_PATTERN: "%Y-%m-%d_%H-%M-%S.log"
-  DEVICE: auto  # auto, cpu, cuda, mps
+  DEVICE: cpu
 
 tuning:
   AUTOENCODER_CLASS: VariationalAutoencoder
