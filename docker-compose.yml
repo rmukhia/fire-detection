@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  fire-detection:
+    build: .
+    image: fire-detection:latest
+    container_name: fire-detection-app
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./models:/app/models
+      - ./logs:/app/logs
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+    ports:
+      - "8888:8888"  # Jupyter
+      - "8787:8787"  # Dask dashboard
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    
+  fire-detection-gpu:
+    extends: fire-detection
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+  preprocessing:
+    extends: fire-detection
+    command: python run_preprocessing_pipeline.py --verbose
+    
+  training:
+    extends: fire-detection
+    command: python run_training.py --verbose
+    depends_on:
+      - preprocessing
+      
+  tuning:
+    extends: fire-detection
+    command: python run_tuning.py --verbose
+    depends_on:
+      - training

@@ -202,16 +202,55 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-output
-.venv
-models
-stats
-*.csv
+# Fire Detection System - Project-specific ignores
 
+# Data directories
+output/
+models/
+data/*.csv
+data/*.parquet
+datasets/
+logs/
+stats/
+intermediate/
+processed_data/
+annotated_data/
+
+# Model files
+*.pth
+*.pt
+*.joblib
+*.pkl
+*.h5
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Performance and profiling
+*.prof
+benchmark.json
+bandit-report.json
+
+# Jupyter notebook outputs
+*.ipynb_checkpoints/
+
+# Docker
+.dockerignore
+
+# IDE files
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project-specific
 GEMINI.md
 .roo
 GEMINI_Template.md
 make_gemini_md.sh
-
-dataset*
-model*
