@@ -54,7 +54,6 @@ class StandardTrainer(BaseTrainer):
         optimizer_name: str,
         batch_size: int,
         latent_dim: int,
-        hidden_dim: int,
         window_size: int,
         num_features: int,
         device: str,
@@ -74,7 +73,6 @@ class StandardTrainer(BaseTrainer):
         self.optimizer_name = optimizer_name
         self.batch_size = batch_size
         self.latent_dim = latent_dim
-        self.hidden_dim = hidden_dim
         self.window_size = window_size
         self.num_features = num_features
         self.stats_images_dir = stats_images_dir
@@ -389,14 +387,13 @@ class StandardTrainer(BaseTrainer):
             },
         )
 
-        self._log_model_architecture(model)
+        #self._log_model_architecture(model)
         self.logger.log_step(
             "Model initialized",
             {
                 "time_steps": self.window_size,
                 "num_features": self.num_features,
                 "latent_dim": self.latent_dim,
-                "hidden_dim": self.hidden_dim,
             },
         )
 
@@ -551,7 +548,6 @@ class StandardTrainer(BaseTrainer):
                 "learning_rate": self.learning_rate,
                 "batch_size": self.batch_size,
                 "latent_dim": self.latent_dim,
-                "hidden_dim": self.hidden_dim,
                 "time_steps": self.window_size,
                 "num_features": self.num_features,
             },

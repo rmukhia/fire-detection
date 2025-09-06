@@ -757,3 +757,80 @@ class ModelEvaluator:
         self.logger.log_step(
             f"Evaluation results saved to {self.eval_results_csv_path} and {self.eval_summary_json_path}"
         )
+
+    def find_optimal_threshold(self) -> Dict[str, Any]:
+        """
+        Finds the optimal anomaly threshold percentile that maximizes the F1-score.
+
+        This method iterates through a range of potential threshold percentiles,
+        calculates the F1-score, precision, and recall for each, and returns
+        the set of metrics corresponding to the highest F1-score.
+
+        Returns:
+            A dictionary containing the best F1-score, precision, recall,
+            accuracy, specificity, and the optimal threshold percentile and value.
+        """
+        self.logger.log_info("Starting search for optimal anomaly threshold.")
+
+        # 1. Compute anomaly scores for all samples
+        reconstruction_errors, all_window_ids, all_fire_ids, all_distances = self.compute_anomaly_scores()
+        true_labels = self.create_true_labels(all_fire_ids, all_distances)
+
+        if len(np.unique(true_labels)) < 2:
+            self.logger.log_warning("Dataset contains only one class. Cannot compute F1-score or other metrics.")
+            return {
+                "f1": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "accuracy": 0.0,
+                "specificity": 0.0,
+                "optimal_threshold_percentile": None,
+                "optimal_threshold_value": None
+            }
+
+        best_f1 = 0.0
+        optimal_percentile = None
+        optimal_threshold_value = None
+        best_metrics = {}
+
+        # 2. Define a range of percentiles to search
+        percentiles_to_test = np.arange(70, 99.99, 0.1) # A finer search range
+
+        self.logger.log_info(f"Testing {len(percentiles_to_test)} threshold percentiles.")
+        progress_bar = tqdm(percentiles_to_test, desc="Finding Optimal Threshold")
+        for p in progress_bar:
+            # 3. Calculate the threshold and predicted labels for the current percentile
+            current_threshold = np.percentile(reconstruction_errors, p)
+            predicted_anomalies = reconstruction_errors > current_threshold
+
+            # 4. Calculate the metrics
+            f1, precision, recall, accuracy, specificity = self.calculate_metrics(true_labels, predicted_anomalies)
+
+            # 5. Check if the current F1 score is the best so far
+            if f1 > best_f1:
+                best_f1 = f1
+                optimal_percentile = p
+                optimal_threshold_value = current_threshold
+                best_metrics = {
+                    "f1": f1,
+                    "precision": precision,
+                    "recall": recall,
+                    "accuracy": accuracy,
+                    "specificity": specificity,
+                    "optimal_threshold_percentile": p,
+                    "optimal_threshold_value": current_threshold
+                }
+
+        if optimal_percentile is not None:
+            self.logger.log_step(
+                "Optimal threshold found",
+                {
+                    "optimal_percentile": optimal_percentile,
+                    "optimal_threshold_value": optimal_threshold_value,
+                    "best_f1_score": best_f1,
+                },
+            )
+            # You can also call _log_evaluation_statistics with these values here if desired
+            # self._log_evaluation_statistics(reconstruction_errors, true_labels, predicted_anomalies, optimal_threshold_value, best_metrics['precision'], best_metrics['recall'], best_metrics['f1'], best_metrics['accuracy'])
+
+        return best_metrics
